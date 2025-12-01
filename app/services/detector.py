@@ -3,8 +3,8 @@ from app.models import lectura as lectura_models
 
 async def analizar_riesgo(db: AsyncSession, lectura: lectura_models.Lectura):
     """
-    Reglas de negocio basadas en el informe:
-    - Temp > 35°C (Critico)
+    Reglas de negocio para detectar condiciones de riesgo basadas en las lecturas de los sensores.:
+    - Temp > 30°C (Critico)
     - Humedad < 30% (Riesgo)
     - Humo > 200 ppm (Incendio activo)
     """
@@ -31,5 +31,4 @@ async def analizar_riesgo(db: AsyncSession, lectura: lectura_models.Lectura):
             nivel=nivel_alerta
         )
         db.add(nueva_alerta)
-        # Aquí podrías agregar lógica para enviar email/SMS vía AWS SNS
         print(f"⚠️ ALERTA GENERADA: {mensaje}")

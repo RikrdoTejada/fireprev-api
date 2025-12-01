@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Optional
 
 class LecturaBase(BaseModel):
-    # Campos opcionales porque un sensor puede enviar solo parciales
     temperatura: Optional[float] = None
     humedad: Optional[float] = None
     humo_ppm: Optional[float] = None
@@ -11,7 +10,7 @@ class LecturaBase(BaseModel):
 
 class LecturaCreate(LecturaBase):
     sensor_id: int
-    # No pedimos 'tiempo' aquí, lo genera la DB automáticamente al recibirlo
+
 
 class LecturaResponse(LecturaBase):
     tiempo: datetime
@@ -20,7 +19,7 @@ class LecturaResponse(LecturaBase):
     class Config:
         from_attributes = True
 
-# Esquema para Alertas (lo usará el Dashboard)
+# Esquema para Alertas 
 class AlertaResponse(BaseModel):
     id: int
     sensor_id: int

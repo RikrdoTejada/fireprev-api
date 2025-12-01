@@ -1,0 +1,58 @@
+services:
+  # 1. CAPA DE DATOS (PostgreSQL + TimescaleDB)
+  db:
+    image: timescale/timescaledb:latest-pg14
+    container_name: fireprev_db
+    restart: always
+    environment:
+      - POSTGRES_USER=fireprev
+      - POSTGRES_PASSWORD=seguridadlocal
+      - POSTGRES_DB=fireprev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. CAPA DE APLICACIÓN (API REST FastAPI)
+  api:
+    build: .
+    container_name: fireprev_api
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    environment:
+      - PROJECT_NAME=FirePrev
+      - POSTGRES_SERVER=db  # En Docker, el hostname es el nombre del servicio
+      - POSTGRES_USER=fireprev
+      - POSTGRES_PASSWORD=seguridadlocal
+      - POSTGRES_DB=fireprev
+      - POSTGRES_PORT=5432
+
+  # 3. CAPA DE PRESENTACIÓN (Grafana)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fireprev_grafana
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      # --- Configuración SMTP para Alertas ---
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=smtp.gmail.com:587
+      - GF_SMTP_USER=ricardo.martin2003@gmail.com
+      - GF_SMTP_PASSWORD=dqcphwtwexnjjwbz # Nota: Usar una contraseña de aplicación
+      - GF_SMTP_SKIP_VERIFY=true
+      - GF_SMTP_FROM_ADDRESS=ricardo.martin2003@gmail.com
+      - GF_SMTP_FROM_NAME=FirePrev Alerta
+      - GF_SMTP_STARTTLS_POLICY=OpportunisticStartTLS
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  postgres_data:
+  grafana_data:

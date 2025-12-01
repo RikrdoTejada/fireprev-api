@@ -19,7 +19,7 @@ class Lectura(Base):
     humedad = Column(Float, nullable=True)      # Sensor DHT22
     humo_ppm = Column(Float, nullable=True)     # Sensor MQ-2 (Gases/Humo)
     
-    # Opcional: Nivel de batería para monitoreo de salud del nodo 
+    # Nivel de batería para monitoreo de salud del nodo 
     bateria_voltaje = Column(Float, nullable=True) 
 
 class Alerta(Base):

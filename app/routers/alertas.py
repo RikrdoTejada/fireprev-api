@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from app.core.database import get_db
-from app.schemas import lectura as lectura_schemas # Aquí definimos AlertaResponse antes
+from app.schemas import lectura as lectura_schemas 
 from app.services import alerta as alerta_service
 
 router = APIRouter()
