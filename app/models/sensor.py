@@ -7,6 +7,8 @@ class Zona(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, unique=True, index=True)
     descripcion = Column(String)
+    latitud = Column(Float, nullable=True)
+    longitud = Column(Float, nullable=True)
 
 class Sensor(Base):
     __tablename__ = "sensores"

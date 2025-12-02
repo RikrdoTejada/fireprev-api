@@ -8,7 +8,7 @@ async def get_zona_by_nombre(db: AsyncSession, nombre: str):
     return result.scalars().first()
 
 async def create_zona(db: AsyncSession, zona: sensor_schemas.ZonaCreate):
-    db_zona = sensor_models.Zona(nombre=zona.nombre, descripcion=zona.descripcion)
+    db_zona = sensor_models.Zona(**zona.model_dump())
     db.add(db_zona)
     await db.commit()
     await db.refresh(db_zona)

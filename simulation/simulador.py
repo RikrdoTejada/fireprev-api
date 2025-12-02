@@ -7,33 +7,20 @@ from datetime import datetime
 
 # --- CONFIGURACIÓN ---
 API_URL = "http://localhost:8000/api/v1"
+FRECUENCIA_ENVIO = 5  
+
 ZONAS_CONFIG = [
-    {
-        "id": 1, 
-        "nombre": "Zona Norte", 
-        "descripcion": "Cobertura forestal sector norte",
-        "lat": -10.4222, "lon": -75.5256
-    },
-    {
-        "id": 2, 
-        "nombre": "Zona Centro", 
-        "descripcion": "Área urbana y transición",
-        "lat": -10.4261, "lon": -75.5187
-    },
-    {
-        "id": 3, 
-        "nombre": "Zona Sur", 
-        "descripcion": "Bosques primarios y reserva",
-        "lat": -10.4327, "lon": -75.5232
-    }
+    { "id": 1, "nombre": "Zona Norte", "descripcion": "Cobertura forestal", "lat": -10.4222, "lon": -75.5256 },
+    { "id": 2, "nombre": "Zona Centro", "descripcion": "Área urbana", "lat": -10.4261, "lon": -75.5187 },
+    { "id": 3, "nombre": "Zona Sur", "descripcion": "Bosques primarios", "lat": -10.4327, "lon": -75.5232 }
 ]
 
-# Cantidad de sensores a crear por zona si está vacía
-SENSORES_POR_ZONA = 5 
-FRECUENCIA_ENVIO = 5  # Segundos entre lecturas (Modificado)
-
-# Diccionario para guardar los IDs de sensores detectados/creados
+SENSORES_POR_ZONA = 5
 SENSORES_DB = {"Norte": [], "Centro": [], "Sur": []}
+
+# Cada sensor tendrá su propio "reloj interno" para que las ondas no sean idénticas
+# Formato: { sensor_id: { 't': 0, 'fase': random_float, 'base_temp': 22.0 } }
+ESTADO_SENSORES = {}
 
 def generar_coordenada_cercana(lat_centro, lon_centro, radio_metros=50):
     delta_lat = (random.uniform(-1, 1) * radio_metros) / 111320
@@ -41,119 +28,142 @@ def generar_coordenada_cercana(lat_centro, lon_centro, radio_metros=50):
     return lat_centro + delta_lat, lon_centro + delta_lon
 
 def inicializar_infraestructura():
-    print(" Verificando infraestructura en la API...")
-    
-    # 1. Crear Zonas
+    print("🏗️  Sincronizando infraestructura...")
     for zona in ZONAS_CONFIG:
         try:
-            payload = {"nombre": zona["nombre"], "descripcion": zona["descripcion"]}
-            requests.post(f"{API_URL}/sensores/zonas/", json=payload)
-        except Exception:
-            pass
+            requests.post(f"{API_URL}/sensores/zonas/", json={
+                "nombre": zona["nombre"], "descripcion": zona["descripcion"],
+                "latitud": zona["lat"], "longitud": zona["lon"]
+            })
+        except: pass
 
-    # 2. Verificar y Crear Sensores
     try:
         response = requests.get(f"{API_URL}/sensores/?limit=1000")
-        sensores_existentes = response.json()
-    except Exception as e:
-        print(f"Error fatal conectando a la API: {e}")
-        sys.exit(1)
+        existentes = response.json()
+    except: return
 
     for zona in ZONAS_CONFIG:
-        sensores_en_zona = [s for s in sensores_existentes if s['zona_id'] == zona['id']]
         clave = zona['nombre'].replace("Zona ", "")
+        en_zona = [s['id'] for s in existentes if s['zona_id'] == zona['id']]
         
-        if len(sensores_en_zona) > 0:
-            print(f"{zona['nombre']}: Encontrados {len(sensores_en_zona)} sensores existentes.")
-            SENSORES_DB[clave] = [s['id'] for s in sensores_en_zona]
+        if en_zona:
+            SENSORES_DB[clave] = en_zona
         else:
-            print(f"{zona['nombre']}: Vacía. Creando {SENSORES_POR_ZONA} sensores...")
+            print(f"⚠️ Creando sensores para {zona['nombre']}...")
             for i in range(1, SENSORES_POR_ZONA + 1):
                 lat, lon = generar_coordenada_cercana(zona['lat'], zona['lon'])
-                codigo = f"SEN-{clave.upper()}-{i:03d}"
-                
                 payload = {
-                    "codigo": codigo, "modelo": "ESP32-LoRa", "zona_id": zona['id'],
+                    "codigo": f"SEN-{clave.upper()}-{i:03d}",
+                    "modelo": "ESP32-LoRa", "zona_id": zona['id'],
                     "latitud": lat, "longitud": lon, "activo": True
                 }
-                
-                resp = requests.post(f"{API_URL}/sensores/", json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    SENSORES_DB[clave].append(data['id'])
-                    print(f" Creado: {codigo}")
+                r = requests.post(f"{API_URL}/sensores/", json=payload)
+                if r.status_code == 200: SENSORES_DB[clave].append(r.json()['id'])
 
-def generar_lectura(zona_nombre, escenario="normal"):
-    # Valores Base
-    temp = random.uniform(20.0, 26.0)
-    humedad = random.uniform(50.0, 70.0)
+def calcular_valores_ondulatorios(sensor_id, escenario="normal"):
+    """
+    Usa funciones SENO para generar curvas naturales y suaves.
+    """
+    # Inicializar sensor si es nuevo
+    if sensor_id not in ESTADO_SENSORES:
+        ESTADO_SENSORES[sensor_id] = {
+            't': random.randint(0, 100),  # Tiempo inicial aleatorio
+            'fase': random.uniform(0, 2 * math.pi), # Desfase para que no vayan todos igual
+            'velocidad': random.uniform(0.05, 0.1), # Qué tan rápido cambia el clima
+            'volt': random.uniform(4.0, 4.2)
+        }
+    
+    estado = ESTADO_SENSORES[sensor_id]
+    
+    # Avanzar el tiempo
+    estado['t'] += estado['velocidad']
+    
+    # --- ESCENARIO NORMAL (Curvas Suaves) ---
+    # Fórmula: Temperatura Base + Amplitud * Seno(tiempo + fase)
+    # Esto crea una onda suave que sube y baja entre 20°C y 26°C
+    temp_base = 23.0
+    temp = temp_base + 3.0 * math.sin(estado['t'] + estado['fase'])
+    
+    # Agregamos un micro-ruido muy pequeño (0.1) para que no sea una línea matemática perfecta
+    temp += random.uniform(-0.1, 0.1)
+
+    # La humedad es INVERSA a la temperatura (Ley física básica)
+    # Si sube temp, baja humedad.
+    humedad = 100 - (temp * 2.5) # Fórmula simple de correlación inversa
+    humedad += random.uniform(-1.0, 1.0) # Un poco de variación
+    
     humo = 0.0
-    voltaje = random.uniform(3.8, 4.2)
+    
+    # Simulación de batería (baja muy lento)
+    estado['volt'] -= 0.0001
+    if estado['volt'] < 3.3: estado['volt'] = 4.2
 
-    # Escenarios
+    # --- SOBRESCRIBIR SI HAY INCENDIO ---
     if escenario == "incendio":
-        temp = random.uniform(45.0, 60.0)
-        humedad = random.uniform(10.0, 20.0)
-        humo = random.uniform(300.0, 500.0)
-        voltaje = random.uniform(3.5, 3.8)
+        # Rompemos la curva suave y forzamos subida exponencial
+        temp = 45.0 + (random.uniform(0, 5))
+        humedad = 15.0 + (random.uniform(-2, 2))
+        humo = 350.0 + (random.uniform(-50, 50))
+        
     elif escenario == "calor":
-        temp = random.uniform(32.0, 38.0)
-        humedad = random.uniform(25.0, 35.0)
-        humo = random.uniform(0.0, 10.0)
+        temp += 10.0 # Ola de calor: Sumamos 10 grados a la curva normal
+        humedad -= 20.0
+        humo = random.uniform(0, 5)
 
-    if not SENSORES_DB[zona_nombre]: return None
-    sensor_id = random.choice(SENSORES_DB[zona_nombre])
+    # Clamping (Límites lógicos)
+    temp = max(0, min(100, temp))
+    humedad = max(0, min(100, humedad))
 
     return {
         "sensor_id": sensor_id,
         "temperatura": round(temp, 2),
         "humedad": round(humedad, 2),
         "humo_ppm": round(humo, 2),
-        "bateria_voltaje": round(voltaje, 2)
+        "bateria_voltaje": round(estado['volt'], 3)
     }
 
-def enviar_datos(zona_nombre, escenario):
-    data = generar_lectura(zona_nombre, escenario)
-    if not data: return
+def enviar_telemetria(zona_nombre, escenario):
+    if not SENSORES_DB[zona_nombre]: return
 
-    try:
-        requests.post(f"{API_URL}/lecturas/", json=data)
-        # Solo imprimimos un log corto para no saturar la consola
-        hora = datetime.now().strftime("%H:%M:%S")
-        estado = "*" if escenario == "incendio" else "-"
-        print(f"[{hora}] {estado} {zona_nombre}: ID {data['sensor_id']} enviado.")
-    except Exception as e:
-        print(f"Error: {e}")
+    # Elegir SOLO UN sensor aleatorio por ciclo para enviar datos
+    # O enviar todos con pausa. La mejor opción visual es enviar TODOS con pausa.
+    
+    for sensor_id in SENSORES_DB[zona_nombre]:
+        data = calcular_valores_ondulatorios(sensor_id, escenario)
+        try:
+            requests.post(f"{API_URL}/lecturas/", json=data)
+        except: pass
+        
+        # --- PAUSA CLAVE ---
+        # Si tienes 5 sensores y envías cada 30s, espera un poco entre cada uno
+        # para que no lleguen al mismo milisegundo a la base de datos.
+        time.sleep(0.01) 
+    
+    print(f"📡 {zona_nombre}: Telemetría enviada ({escenario})")
 
 def main():
-    print("---  SIMULADOR IOT (Frecuencia: 60s) ---")
+    print(f"--- 🌲 SIMULADOR DE CLIMA REALISTA ({FRECUENCIA_ENVIO}s) 🌲 ---")
     inicializar_infraestructura()
-    print("-" * 50)
     
-    print("1. Modo Tranquilo (Todo Normal)")
-    print("2.  INCENDIO en ZONA SUR")
-    print("3.  INCENDIO en ZONA NORTE")
-    print("4.  OLA DE CALOR en ZONA CENTRO")
-    
-    opcion = input("\nSelecciona un escenario (1-4): ")
-    
+    print("\n1. Modo Normal (Ciclos naturales)")
+    print("2. 🔥 INCENDIO en SUR")
+    print("3. 🔥 INCENDIO en NORTE")
+    opcion = input("Elige escenario: ")
+
     try:
-        print(f"\n Iniciando envío de datos cada {FRECUENCIA_ENVIO} segundos...")
         while True:
-            escenario_sur = "incendio" if opcion == "2" else "normal"
-            escenario_norte = "incendio" if opcion == "3" else "normal"
-            escenario_centro = "calor" if opcion == "4" else "normal"
-
-            # Enviar datos
-            enviar_datos("Norte", escenario_norte)
-            enviar_datos("Centro", escenario_centro)
-            enviar_datos("Sur", escenario_sur)
-
-            print(f"💤 Esperando {FRECUENCIA_ENVIO}s para el siguiente ciclo...")
-            time.sleep(FRECUENCIA_ENVIO) 
+            esc_sur = "incendio" if opcion == "2" else "normal"
+            esc_norte = "incendio" if opcion == "3" else "normal"
+            
+            print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Generando ondas climáticas...")
+            enviar_telemetria("Norte", esc_norte)
+            enviar_telemetria("Centro", "normal")
+            enviar_telemetria("Sur", esc_sur)
+            
+            time.sleep(FRECUENCIA_ENVIO)
             
     except KeyboardInterrupt:
-        print("\n Simulador detenido.")
+        print("\nApagando simulador.")
 
 if __name__ == "__main__":
     main()

@@ -5,6 +5,8 @@ from typing import Optional
 class ZonaBase(BaseModel):
     nombre: str
     descripcion: Optional[str] = None
+    latitud: Optional[float] = None
+    longitud: Optional[float] = None
 
 class ZonaCreate(ZonaBase):
     pass
