@@ -1,5 +1,5 @@
 # FirePrev API - Sistema de Detección Temprana de Incendios Forestales
-## API REST desarrollada con **FastAPI** para la ingesta, procesamiento y monitoreo de datos provenientes de una red de sensores IoT (LoRaWAN) desplegada en el distrito de Huancabamba, Oxapampa.
+API REST desarrollada con **FastAPI** para la ingesta, procesamiento y monitoreo de datos provenientes de una red de sensores IoT (LoRaWAN) desplegada en el distrito de Huancabamba, Oxapampa.
 
 Este proyecto forma parte de la **Capa de Aplicación** de la arquitectura de monitoreo ambiental.
 
